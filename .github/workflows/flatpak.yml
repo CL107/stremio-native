@@ -1,0 +1,87 @@
+name: Flatpak build
+
+# Runs on ubuntu-latest, not the blacksmith runners the other workflows use, so
+# this builds in a fork.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["flatpak-*"]
+
+jobs:
+  flatpak:
+    name: Flatpak x86_64
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Reclaim runner disk
+        run: |
+          set -euo pipefail
+          # The SDK, boost and a release build of the Rust tree do not fit in the
+          # image's default free space.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost /usr/local/lib/node_modules \
+            "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
+      - name: Install flatpak-builder
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder python3-aiohttp python3-toml
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      - name: Cache flatpak-builder state
+        uses: actions/cache@v4
+        with:
+          path: .flatpak-builder
+          key: flatpak-builder-${{ hashFiles('flatpak/*.json', 'Cargo.lock') }}
+          restore-keys: flatpak-builder-
+
+      - name: Install the runtime, SDK and extensions
+        run: |
+          set -euo pipefail
+          # Let flatpak-builder resolve the branches from the manifest rather
+          # than pinning them here.
+          flatpak-builder --user --install-deps-from=flathub --install-deps-only \
+            --force-clean flatpak/build flatpak/com.stremio.StremioNative.Devel.json
+
+      - name: Generate offline cargo sources
+        run: |
+          set -euo pipefail
+          python3 flatpak/flatpak-builder-tools/cargo/flatpak-cargo-generator.py \
+            Cargo.lock -o flatpak/cargo-sources.json
+          python3 -c "import json;print(len(json.load(open('flatpak/cargo-sources.json'))),'sources')"
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          flatpak-builder --user --force-clean --disable-rofiles-fuse \
+            --repo=flatpak/repo flatpak/build \
+            flatpak/com.stremio.StremioNative.Devel.json
+
+      - name: Bundle
+        run: |
+          set -euo pipefail
+          flatpak build-bundle flatpak/repo \
+            com.stremio.StremioNative.Devel.flatpak \
+            com.stremio.StremioNative.Devel
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stremio-native-flatpak
+          path: com.stremio.StremioNative.Devel.flatpak
+          if-no-files-found: error
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: flatpak-build-logs
+          path: .flatpak-builder/build/*/**/*log*
+          if-no-files-found: ignore
