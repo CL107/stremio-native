@@ -180,7 +180,8 @@
                     "RUSTFLAGS": "-L /app/lib -L /app/lib64 -C link-arg=-Wl,-rpath-link=/app/lib -C link-arg=-Wl,-rpath-link=/app/lib64",
                     "PKG_CONFIG_PATH": "/app/lib/pkgconfig:/app/lib64/pkgconfig:/usr/lib/pkgconfig",
                     "VCPKGRS_TRIPLET": "x64-linux-release",
-                    "VCPKG_INSTALLED_DIR": "/app"
+                    "VCPKG_INSTALLED_DIR": "/app",
+                    "SKIA_BINARIES_URL": "file:///run/build/stremio-native/skia-binaries-{key}.tar.gz"
                 }
             },
             "build-commands": [
@@ -199,6 +200,12 @@
                 {
                     "type": "dir",
                     "path": "../"
+                },
+                {
+                    "comment": "skia-bindings downloads this itself, and the build sandbox has no network",
+                    "type": "file",
+                    "url": "https://github.com/rust-skia/skia-binaries/releases/download/0.99.0/skia-binaries-a25a0fdb7d90429aa2d1-x86_64-unknown-linux-gnu-gl-jpegd-jpege-pdf-textlayout-vulkan.tar.gz",
+                    "sha256": "097e78d775c9156dc4b070b9cca7008dbab587513ecb1924baf4cf9620f3119b"
                 },
                 "cargo-sources.json"
             ]
